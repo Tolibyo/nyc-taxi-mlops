@@ -2,7 +2,7 @@
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_PATH = PROJECT_ROOT / "data" / "raw" / "yellow" / "2024" / "yellow_tripdata_2024-01.parquet"
-MODEL_PATH = PROJECT_ROOT / "models" / "baseline_pipeline.joblib"
+MODEL_PATH = PROJECT_ROOT / "models" / "histgb_pipeline.joblib"
 
 
 import polars as pl
