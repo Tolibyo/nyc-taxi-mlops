@@ -1,9 +1,10 @@
 __pycache__/
 *.pyc
-.venv/
 .env
 data/raw/
 mlruns/
 *.joblib
 .DS_Store
 *.egg-info/
+.venv/
+mlflow.db
