@@ -8,3 +8,5 @@ mlruns/
 *.egg-info/
 .venv/
 mlflow.db
+reports/
+uv.lock
