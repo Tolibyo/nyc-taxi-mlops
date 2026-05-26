@@ -1,0 +1,9 @@
+experiment_name: "histgb_cyclical"
+model:
+  type: "HistGradientBoostingRegressor"
+  params: {}
+features:
+  cyclical_time: true
+  categorical_strategy: "onehot"
+data:
+  subsample_rows: null

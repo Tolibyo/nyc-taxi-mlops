@@ -1,0 +1,10 @@
+
+experiment_name: "baseline_lr"
+model:
+  type: "LinearRegression"
+  params: {}
+features:
+  cyclical_time: false
+  categorical_strategy: "onehot"
+data:
+  subsample_rows: null
