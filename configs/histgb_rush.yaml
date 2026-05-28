@@ -1,12 +1,12 @@
-experiment_name: "histgb_cyclical"
+experiment_name: "histgb_is_rush_hour"
 model:
   type: "HistGradientBoostingRegressor"
   params: {}
 features:
-  cyclical_time: true
+  cyclical_time: false
   categorical_strategy: "native"
   add_is_weekend: false
-  add_is_rush_hour: false
+  add_is_rush_hour: true
   add_district: false
 data:
   subsample_rows: null
