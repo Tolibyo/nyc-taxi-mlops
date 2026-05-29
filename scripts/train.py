@@ -21,7 +21,7 @@ from src.cleaning import clean_dataframe
 
 # anchored paths so script runs from anywhere
 PROJECT_ROOT = Path(__file__).parent.parent
-DATA_PATH = PROJECT_ROOT / "data" / "raw" / "yellow" / "2024" / "yellow_tripdata_2024-01.parquet"
+DATA_PATH = PROJECT_ROOT / "data" / "raw" / "yellow" / "2024"
 MODEL_PATH = PROJECT_ROOT / "models"
 
 # read which config to run from the command line
@@ -35,9 +35,19 @@ with open(args.config) as f:
 
 print(f"Running experiment: {config['experiment_name']}")
 
+months = config["data"]["months"] 
+
 # load raw data and apply shared cleaning rules
-df_raw = pl.read_parquet(DATA_PATH)
-df_clean = clean_dataframe(df_raw)
+paths = [DATA_PATH / f"yellow_tripdata_2024-{m}.parquet" for m in months]
+lazy_frames = [
+    pl.scan_parquet(p).with_columns(
+        pl.col("tpep_pickup_datetime").cast(pl.Datetime("us")),
+        pl.col("tpep_dropoff_datetime").cast(pl.Datetime("us")),
+    ) 
+    for p in paths
+]
+df_lazy = pl.concat(lazy_frames)
+df_clean = clean_dataframe(df_lazy, year=2024, months=months).collect()
 print(df_clean.shape)
 
 # optionally cut data size for faster runs
@@ -90,6 +100,25 @@ print(f"Categorical: {categorical_cols}")
 print(f"Numeric: {numeric_cols}")
 
 strategy = config["features"]["categorical_strategy"]
+
+if config["features"]["bucket_rare_zones"]:
+    top_n = config["features"]["top_n_zones"]
+    # find the top N zones by frequency
+    top_zones = (
+        X.group_by("PULocationID")
+        .agg(pl.len().alias("n"))
+        .sort("n", descending=True)
+        .head(top_n)
+        .get_column("PULocationID")
+        .to_list()
+    )
+    # replace zones not in top_n with -1
+    X = X.with_columns(
+        pl.when(pl.col("PULocationID").is_in(top_zones))
+        .then(pl.col("PULocationID"))
+        .otherwise(-1)
+        .alias("PULocationID")
+    )
 
 # convert to pandas and split into train/test
 X_pd = X.to_pandas()

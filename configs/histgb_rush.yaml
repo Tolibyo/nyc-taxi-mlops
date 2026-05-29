@@ -8,5 +8,8 @@ features:
   add_is_weekend: false
   add_is_rush_hour: true
   add_district: false
+  bucket_rare_zones: false
+  top_n_zones: null
 data:
   subsample_rows: null
+  months: ["01"]

@@ -6,5 +6,11 @@ model:
 features:
   cyclical_time: false
   categorical_strategy: "onehot"
+  bucket_rare_zones: false
+  top_n_zones: null
+  add_is_weekend: false
+  add_is_rush_hour: false
+  add_district: false
 data:
   subsample_rows: null
+  months: ["01"]

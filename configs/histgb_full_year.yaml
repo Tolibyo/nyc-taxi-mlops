@@ -1,4 +1,4 @@
-experiment_name: "histgb_pickup_district"
+experiment_name: "histgb_full_year"
 model:
   type: "HistGradientBoostingRegressor"
   params: {}
@@ -7,9 +7,9 @@ features:
   categorical_strategy: "native"
   add_is_weekend: false
   add_is_rush_hour: false
-  add_district: true
-  bucket_rare_zones: false
-  top_n_zones: null
+  add_district: false
+  bucket_rare_zones: true
+  top_n_zones: 250
 data:
   subsample_rows: null
-  months: ["01"]
+  months: ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
