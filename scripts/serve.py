@@ -1,18 +1,14 @@
 
-
 from pathlib import Path
 import joblib
-
-PROJECT_ROOT = Path(__file__).parent.parent
-MODEL_PATH = PROJECT_ROOT / "models" / "histgb_full_year_pipeline.joblib"
-
-pipeline = joblib.load(MODEL_PATH)
-
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).parent.parent
+MODEL_PATH = PROJECT_ROOT / "models" / "histgb_full_year_pipeline.joblib"
+pipeline = joblib.load(MODEL_PATH)
 
 
 class TripRequest(BaseModel):

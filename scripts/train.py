@@ -3,7 +3,6 @@ import yaml
 from pathlib import Path
 
 import polars as pl
-import pandas as pd
 import numpy as np
 import joblib
 import mlflow

@@ -1,7 +1,6 @@
 
 import requests
 from pathlib import Path
-import polars as pl
 
 def download_tlc_data(taxi_type, year, month, output_dir):
 
