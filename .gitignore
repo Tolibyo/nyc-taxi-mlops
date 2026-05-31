@@ -9,4 +9,3 @@ mlruns/
 .venv/
 mlflow.db
 reports/
-uv.lock
