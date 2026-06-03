@@ -175,7 +175,7 @@ with mlflow.start_run():
     mlflow.log_param("subsample_rows", config["data"]["subsample_rows"])
     mlflow.log_param("n_train_rows", len(X_train))
     mlflow.log_param("n_features", X_train.shape[1])
-    mlflow.log_param("data_source", "yellow_tripdata_2024-01")
+    mlflow.log_param("data_source", f"yellow_2024_{months[0]}-{months[-1]}")
     for k, v in model_params.items():
         mlflow.log_param(f"hp_{k}", v)
 
