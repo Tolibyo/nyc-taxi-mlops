@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: taxi
-          image: nyc_taxi-serve:latest
+          image: nyc-taxi-serve:latest
           imagePullPolicy: IfNotPresent
           ports:
            - containerPort: 8000
