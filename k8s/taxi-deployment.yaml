@@ -1,0 +1,22 @@
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taxi-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: taxi
+  template:
+    metadata:
+      labels:
+        app: taxi
+    spec:
+      containers:
+        - name: taxi
+          image: nyc_taxi-serve:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+           - containerPort: 8000
