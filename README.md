@@ -27,6 +27,7 @@ src/        cleaning.py        # shared cleaning + feature logic
 tests/      test_cleaning.py   # fixture-based unit tests
 configs/    one YAML per experiment
 data/       reference zone lookup (raw parquet is gitignored)
+k8s/        deployment, service, ingress, kind cluster config
 models/     trained .joblib pipelines (gitignored)
 Dockerfile, .github/workflows/ci.yml
 pyproject.toml, uv.lock, requirements.txt
@@ -142,9 +143,36 @@ docker build -t nyc-taxi-serve .
 docker run --rm -p 8000:8000 nyc-taxi-serve
 ```
 
+## Kubernetes
+
+Runs on Kubernetes, verified locally on [kind](https://kind.sigs.k8s.io/). The
+manifests in `k8s/` are portable — the same YAML runs on a managed cluster (EKS,
+GKE) unchanged. The model is baked into the image, served behind a Service and
+Ingress; `imagePullPolicy: IfNotPresent` uses the locally side-loaded image
+instead of pulling from a registry.
+
+```bash
+kind create cluster --name mlops --config k8s/kind-config.yaml
+kind load docker-image nyc-taxi-serve:latest --name mlops
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+kubectl wait --namespace ingress-nginx --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller --timeout=90s
+
+kubectl apply -f k8s/taxi-deployment.yaml -f k8s/taxi-service.yaml -f k8s/taxi-ingress.yaml
+```
+
+Predict through the ingress (port 80, routed to the service on 8000):
+
+```bash
+curl -X POST http://localhost/predict \
+  -H "Content-Type: application/json" \
+  -d '{"pickup_datetime":"2024-06-15T17:30:00","passenger_count":2,"vendor_id":2,"ratecode_id":1,"pickup_location_id":161}'
+```
+
 ## Stack
 
-Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, uv, GitHub Actions.
+Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, uv, GitHub Actions.
 
 ## Limitations and what's next
 
@@ -158,8 +186,7 @@ and apply the same thing at serve time.
 There's no model registry, the served model is a fixed file baked into the image,
 and it's single-node with no autoscaling, GPU, or real SLOs.
 
-Next: Kubernetes deployment (local kind, then cloud), infrastructure as code with
-Terraform, a model registry with the service behind autoscaling, observability and
+Next: Cloud Kubernetes (EKS), infrastructure as code with Terraform, a model registry with the service behind autoscaling, observability and
 SLOs, and a PyTorch plus ONNX path for inference optimization.
 
 ## Data
