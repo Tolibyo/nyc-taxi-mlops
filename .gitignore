@@ -9,3 +9,4 @@ mlruns/
 .venv/
 mlflow.db
 reports/
+k8s/taxi-secret.yaml

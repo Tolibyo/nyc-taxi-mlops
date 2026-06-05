@@ -5,9 +5,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
 import pandas as pd
+import os
 
 PROJECT_ROOT = Path(__file__).parent.parent
-MODEL_PATH = PROJECT_ROOT / "models" / "histgb_full_year_pipeline.joblib"
+MODEL_PATH = os.environ.get("MODEL_PATH", str(PROJECT_ROOT / "models" / "histgb_full_year_pipeline.joblib"))
 pipeline = joblib.load(MODEL_PATH)
 
 

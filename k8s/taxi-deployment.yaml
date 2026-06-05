@@ -18,5 +18,8 @@ spec:
         - name: taxi
           image: nyc-taxi-serve:latest
           imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: taxi-config
           ports:
            - containerPort: 8000
