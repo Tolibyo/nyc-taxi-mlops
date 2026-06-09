@@ -1,0 +1,46 @@
+
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taxi-deploy
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: taxi
+  template:
+    metadata:
+      labels:
+        app: taxi
+    spec:
+      containers:
+        - name: taxi
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: taxi-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          ports:
+            - containerPort: {{ .Values.service.port }}

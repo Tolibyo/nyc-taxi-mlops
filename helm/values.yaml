@@ -1,0 +1,10 @@
+
+
+
+replicaCount: 1
+image:
+  repository: nyc-taxi-serve
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  port: 8000
