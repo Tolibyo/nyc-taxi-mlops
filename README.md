@@ -28,6 +28,7 @@ tests/      test_cleaning.py   # fixture-based unit tests
 configs/    one YAML per experiment
 data/       reference zone lookup (raw parquet is gitignored)
 k8s/        deployment, service, ingress, kind cluster config
+helm/       helm chart (templated manifests + values)
 models/     trained .joblib pipelines (gitignored)
 Dockerfile, .github/workflows/ci.yml
 pyproject.toml, uv.lock, requirements.txt
@@ -170,9 +171,25 @@ curl -X POST http://localhost/predict \
   -d '{"pickup_datetime":"2024-06-15T17:30:00","passenger_count":2,"vendor_id":2,"ratecode_id":1,"pickup_location_id":161}'
 ```
 
+## Helm
+
+The same app is packaged as a Helm chart in `helm/`, bundling the manifests with
+templated values so config (image, replicas, port) is set without editing YAML.
+Deploy the whole release in one command; `--set` or a per-environment values file
+overrides defaults. Stateful storage is deliberately kept out of the chart so an
+uninstall can't delete data.
+
+```bash
+helm install taxi ./helm
+helm upgrade taxi ./helm --set replicaCount=3
+helm rollback taxi 1
+```
+
+Requires the `nyc-taxi-serve` image built and loaded into the cluster (see above).
+
 ## Stack
 
-Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, uv, GitHub Actions.
+Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, Helm, uv, GitHub Actions.
 
 ## Limitations and what's next
 
