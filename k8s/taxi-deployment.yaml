@@ -1,5 +1,7 @@
 
 
+
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,5 +23,24 @@ spec:
           envFrom:
             - configMapRef:
                 name: taxi-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
           ports:
-           - containerPort: 8000
+            - containerPort: 8000
