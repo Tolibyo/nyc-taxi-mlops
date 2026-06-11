@@ -7,7 +7,9 @@ from datetime import datetime
 import pandas as pd
 import os
 import boto3
-from dotenv import load_dotenv; load_dotenv()
+from dotenv import load_dotenv
+
+load_dotenv()
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
