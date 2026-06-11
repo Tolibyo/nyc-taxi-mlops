@@ -12,3 +12,6 @@ reports/
 k8s/taxi-secret.yaml
 k8s/taxi-pvc.yaml
 k8s/loader-pod.yaml
+.terraform/
+*.tfstate
+*.tfstate.*

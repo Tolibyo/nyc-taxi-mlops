@@ -9,6 +9,8 @@ dependencies = [
     "joblib",
     "pydantic",
     "pandas",
+    "boto3>=1.43.27",
+    "python-dotenv>=1.2.2",
 ]
 
 [dependency-groups]

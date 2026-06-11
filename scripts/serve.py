@@ -6,10 +6,18 @@ from pydantic import BaseModel
 from datetime import datetime
 import pandas as pd
 import os
+import boto3
+from dotenv import load_dotenv; load_dotenv()
 
 PROJECT_ROOT = Path(__file__).parent.parent
-MODEL_PATH = os.environ.get("MODEL_PATH", str(PROJECT_ROOT / "models" / "histgb_full_year_pipeline.joblib"))
-pipeline = joblib.load(MODEL_PATH)
+
+S3_ENDPOINT = os.environ.get("S3_ENDPOINT_URL")
+MODEL_BUCKET = os.environ.get("MODEL_BUCKET", "nyc-taxi-models")
+MODEL_KEY = os.environ.get("MODEL_KEY", "histgb_full_year_pipeline.joblib")
+
+s3 = boto3.client("s3", endpoint_url=S3_ENDPOINT)
+s3.download_file(MODEL_BUCKET, MODEL_KEY, "/tmp/model.joblib")
+pipeline = joblib.load("/tmp/model.joblib")
 
 
 class TripRequest(BaseModel):
