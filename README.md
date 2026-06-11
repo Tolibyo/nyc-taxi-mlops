@@ -29,6 +29,7 @@ configs/    one YAML per experiment
 data/       reference zone lookup (raw parquet is gitignored)
 k8s/        deployment, service, ingress, kind cluster config
 helm/       helm chart (templated manifests + values)
+terraform/  s3 model bucket + IAM, as code (LocalStack)
 models/     trained .joblib pipelines (gitignored)
 Dockerfile, .github/workflows/ci.yml
 pyproject.toml, uv.lock, requirements.txt
@@ -148,9 +149,9 @@ docker run --rm -p 8000:8000 nyc-taxi-serve
 
 Runs on Kubernetes, verified locally on [kind](https://kind.sigs.k8s.io/). The
 manifests in `k8s/` are portable — the same YAML runs on a managed cluster (EKS,
-GKE) unchanged. The model is baked into the image, served behind a Service and
-Ingress; `imagePullPolicy: IfNotPresent` uses the locally side-loaded image
-instead of pulling from a registry.
+GKE) unchanged. The model is baked into the image, served behind a Service and Ingress;
+`imagePullPolicy: IfNotPresent` uses the locally side-loaded image instead of pulling
+from a registry.
 
 ```bash
 kind create cluster --name mlops --config k8s/kind-config.yaml
@@ -187,9 +188,25 @@ helm rollback taxi 1
 
 Requires the `nyc-taxi-serve` image built and loaded into the cluster (see above).
 
+## Model storage
+
+`serve.py` loads the model from the image by default, or fetches it from S3 when
+`MODEL_BUCKET` is set. The bucket and IAM read access are provisioned as code in `terraform/`, verified locally
+against [LocalStack](https://localstack.cloud/). Credentials and the S3 endpoint come
+from the environment (`.env`, gitignored; `.env.example` is the template), so no secrets
+live in code. Against real AWS the same `serve.py` drops the endpoint and picks up the
+serving role's credentials automatically.
+
+```bash
+docker run -d -p 4566:4566 localstack/localstack:3      # local AWS
+cd terraform && terraform init && terraform apply        # provision bucket + IAM
+aws --endpoint-url=http://localhost:4566 s3 cp \
+  models/histgb_full_year_pipeline.joblib s3://nyc-taxi-models/
+```
+
 ## Stack
 
-Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, Helm, uv, GitHub Actions.
+Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, Helm, Terraform, uv, GitHub Actions.
 
 ## Limitations and what's next
 
@@ -200,10 +217,10 @@ zones bucketed, but serve.py passes the raw zone through, so requests for rare z
 are served a bit out of distribution. The fix is to save the bucketing from training
 and apply the same thing at serve time.
 
-There's no model registry, the served model is a fixed file baked into the image,
+There's no model registry yet. When fetched from S3 it's a fixed key, not versioned,
 and it's single-node with no autoscaling, GPU, or real SLOs.
 
-Next: Cloud Kubernetes (EKS), infrastructure as code with Terraform, a model registry with the service behind autoscaling, observability and
+Next: Cloud Kubernetes (EKS), a model registry with the service behind autoscaling, observability and
 SLOs, and a PyTorch plus ONNX path for inference optimization.
 
 ## Data
