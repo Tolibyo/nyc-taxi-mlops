@@ -30,6 +30,7 @@ data/       reference zone lookup (raw parquet is gitignored)
 k8s/        deployment, service, ingress, kind cluster config
 helm/       helm chart (templated manifests + values)
 terraform/  s3 model bucket + IAM, as code (LocalStack)
+eks/        vpc networking on real AWS, as code (terraform)
 models/     trained .joblib pipelines (gitignored)
 Dockerfile, .github/workflows/ci.yml
 pyproject.toml, uv.lock, requirements.txt
@@ -204,6 +205,20 @@ aws --endpoint-url=http://localhost:4566 s3 cp \
   models/histgb_full_year_pipeline.joblib s3://nyc-taxi-models/
 ```
 
+## Cloud (EKS)
+
+The VPC cluster run - is provisioned on real AWS, in Terraform, under
+`eks/` (separate from the LocalStack `terraform/`): one network across two AZs,
+public and private subnets, a single NAT (cost over per-AZ HA), and the subnet
+tags EKS needs to place load balancers. The network layer only - the cluster and
+the deployment onto it come next.
+
+```bash
+cd eks
+terraform init && terraform plan && terraform apply
+terraform destroy
+```
+
 ## Stack
 
 Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, Helm, Terraform, uv, GitHub Actions.
@@ -220,7 +235,7 @@ and apply the same thing at serve time.
 There's no model registry yet. When fetched from S3 it's a fixed key, not versioned,
 and it's single-node with no autoscaling, GPU, or real SLOs.
 
-Next: Cloud Kubernetes (EKS), a model registry with the service behind autoscaling, observability and
+Next: The EKS cluster and deployment onto it, a model registry with the service behind autoscaling, observability and
 SLOs, and a PyTorch plus ONNX path for inference optimization.
 
 ## Data
