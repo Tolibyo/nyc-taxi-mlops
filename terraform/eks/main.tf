@@ -116,6 +116,7 @@ resource "aws_route_table_association" "private_b" {
 
 resource "aws_ecr_repository" "tripsvc" {
     name = "tripsvc"
+    force_delete = true
 }
 
 output "repository_url" {
@@ -196,4 +197,100 @@ resource "aws_eks_node_group" "tripsvc" {
     instance_types = [ "t3.medium" ]
 
     depends_on = [ aws_iam_role_policy_attachment.node_policies ]
+}
+
+data "tls_certificate" "eks" {
+    url = aws_eks_cluster.tripsvc.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+    url = aws_eks_cluster.tripsvc.identity[0].oidc[0].issuer
+    client_id_list = [ "sts.amazonaws.com" ]
+    thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+}
+
+resource "aws_iam_policy" "lb_controller" {
+    policy = file("iam_policy.json")
+}
+
+resource "aws_iam_role" "lb_controller" {
+    assume_role_policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+            Effect = "Allow",
+            Principal = { Federated = aws_iam_openid_connect_provider.eks.arn }
+            Action = "sts:AssumeRoleWithWebIdentity"
+            Condition = { StringEquals = {"${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub": "system:serviceaccount:kube-system:aws-load-balancer-controller"}}
+        }]
+    })
+}
+
+resource "aws_iam_role_policy_attachment" "lb_controller" {
+    role = aws_iam_role.lb_controller.name
+    policy_arn = aws_iam_policy.lb_controller.arn
+}
+
+data "aws_eks_cluster_auth" "tripsvc" {
+    name = aws_eks_cluster.tripsvc.name
+}
+
+provider "kubernetes" {
+  host                   = aws_eks_cluster.tripsvc.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.tripsvc.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", "tripsvc", "--region", "us-east-1"]
+  }
+}
+
+provider "helm" {
+    kubernetes = {
+        host = aws_eks_cluster.tripsvc.endpoint
+        cluster_ca_certificate = base64decode(aws_eks_cluster.tripsvc.certificate_authority[0].data)
+        exec = {
+          api_version = "client.authentication.k8s.io/v1beta1"
+          command = "aws"
+          args = ["eks", "get-token", "--cluster-name", "tripsvc", "--region", "us-east-1"]
+        }
+    }
+}
+
+resource "helm_release" "lb_controller" {
+    name = "aws-load-balancer-controller"
+    repository = "https://aws.github.io/eks-charts"
+    chart = "aws-load-balancer-controller"
+    namespace = "kube-system"
+    depends_on = [ kubernetes_service_account.lb_controller ]
+    set = [ {
+            name = "clusterName"
+            value = "tripsvc"
+    },
+    {
+            name = "serviceAccount.create"
+            value = "false"
+    },
+    {
+            name = "serviceAccount.name"
+            value = "aws-load-balancer-controller"
+    },
+    {
+            name = "region"
+            value = "us-east-1"
+    },
+    {
+            name = "vpcId"
+            value = "vpc-01c15af503ef926c9"
+    }
+  ]
+}
+
+resource "kubernetes_service_account" "lb_controller" {
+    metadata {
+      name = "aws-load-balancer-controller"
+      namespace = "kube-system"
+      annotations = {
+        "eks.amazonaws.com/role-arn" = aws_iam_role.lb_controller.arn
+      }
+    }
 }

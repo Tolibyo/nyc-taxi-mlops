@@ -22,18 +22,19 @@ Target: `trip_duration` = dropoff minus pickup, in seconds.
 ## Layout
 
 ```
-scripts/    download.py, train.py, serve.py, monitor.py
-src/        cleaning.py        # shared cleaning + feature logic
-tests/      test_cleaning.py   # fixture-based unit tests
-configs/    one YAML per experiment
-data/       reference zone lookup (raw parquet is gitignored)
-k8s/        deployment, service, ingress, kind cluster config
-helm/       helm chart (templated manifests + values)
-terraform/  s3 model bucket + IAM, as code (LocalStack)
-eks/        vpc networking on real AWS, as code (terraform)
-models/     trained .joblib pipelines (gitignored)
+scripts/        download.py, train.py, serve.py, monitor.py
+src/            cleaning.py        # shared cleaning + feature logic
+tests/          test_cleaning.py   # fixture-based unit tests
+configs/        one YAML per experiment
+data/           reference zone lookup (raw parquet is gitignored)
+k8s/local/      kind manifests + cluster config (deployment, service, ingress)
+k8s/eks/        cloud manifests for EKS (deployment, service, ingress)
+helm/           helm chart (templated manifests + values)
+terraform/      s3 model bucket + IAM, as code (LocalStack)
+terraform/eks/  EKS cluster, node group, IRSA, LB controller, as code (real AWS)
+models/         trained .joblib pipelines (gitignored)
 Dockerfile, .github/workflows/ci.yml
-pyproject.toml, uv.lock, requirements.txt
+pyproject.toml, uv.lock
 ```
 
 ## How it's built
@@ -65,14 +66,16 @@ top 250.
 
 **Manifest vs lockfile.** `pyproject.toml` declares top-level deps, split into a
 runtime set and a dev group. `uv.lock` pins the full tree and is committed, so a
-clone or CI rebuilds the exact same environment. `requirements.txt` is generated
-from the lockfile and exists only for the Docker build.
+clone, CI, and the Docker build all rebuild the exact same environment. There's no
+`requirements.txt` — the image installs straight from the lockfile with
+`uv sync --locked`, one source of truth.
 
-**Lean serving image.** The image installs runtime deps only, not the training
-stack (no MLflow, Polars, Evidently, pytest). scikit-learn is in there because the
-saved pipeline unpickles into sklearn objects even though serve.py never imports it
-directly. Deps are installed before code is copied so a code change doesn't bust the
-dependency cache. Ends up around 740MB instead of 2GB.
+**Lean serving image.** Built on the `uv` base image, installing runtime deps only
+via `uv sync --locked`, not the training stack (no MLflow, Polars, Evidently,
+pytest). scikit-learn is in there because the saved pipeline unpickles into sklearn
+objects even though serve.py never imports it directly; boto3 is in for the optional
+S3 model fetch. Deps are synced before code is copied so a code change doesn't bust
+the dependency cache. Runtime-only keeps it a fraction of the ~2GB full stack.
 
 **Tests.** Small synthetic DataFrames, one cleaning rule asserted per test, no
 external data, sub-second. CI runs them plus ruff on every push.
@@ -149,20 +152,20 @@ docker run --rm -p 8000:8000 nyc-taxi-serve
 ## Kubernetes
 
 Runs on Kubernetes, verified locally on [kind](https://kind.sigs.k8s.io/). The
-manifests in `k8s/` are portable — the same YAML runs on a managed cluster (EKS,
-GKE) unchanged. The model is baked into the image, served behind a Service and Ingress;
-`imagePullPolicy: IfNotPresent` uses the locally side-loaded image instead of pulling
-from a registry.
+manifests in `k8s/local/` target kind — nginx ingress, the locally side-loaded
+image (`imagePullPolicy: IfNotPresent`), model baked into the image, served behind a
+Service and Ingress. The cloud variant lives in `k8s/eks/` and differs where it has
+to (ALB ingress class, the ECR image); see Cloud below.
 
 ```bash
-kind create cluster --name mlops --config k8s/kind-config.yaml
+kind create cluster --name mlops --config k8s/local/kind-config.yaml
 kind load docker-image nyc-taxi-serve:latest --name mlops
 
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 kubectl wait --namespace ingress-nginx --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller --timeout=90s
 
-kubectl apply -f k8s/taxi-deployment.yaml -f k8s/taxi-service.yaml -f k8s/taxi-ingress.yaml
+kubectl apply -f k8s/local/taxi-deployment.yaml -f k8s/local/taxi-service.yaml -f k8s/local/taxi-ingress.yaml
 ```
 
 Predict through the ingress (port 80, routed to the service on 8000):
@@ -207,17 +210,49 @@ aws --endpoint-url=http://localhost:4566 s3 cp \
 
 ## Cloud (EKS)
 
-The VPC cluster run - is provisioned on real AWS, in Terraform, under
-`eks/` (separate from the LocalStack `terraform/`): one network across two AZs,
-public and private subnets, a single NAT (cost over per-AZ HA), and the subnet
-tags EKS needs to place load balancers. The network layer only - the cluster and
-the deployment onto it come next.
+The full serving stack runs on a real EKS cluster, provisioned in Terraform under
+`terraform/eks/` (separate from the LocalStack `terraform/`): one network across two
+AZs from the VPC layer, an EKS control plane, and a managed node group of two
+t3.medium workers in the private subnets. `aws eks update-kubeconfig` points kubectl
+at the cluster.
+
+Public traffic goes through the AWS Load Balancer Controller, which turns a
+Kubernetes Ingress into a real ALB. It gets its AWS permissions through IRSA (IAM
+Roles for Service Accounts): an OIDC provider, an IAM role scoped to a single service
+account, and that service account annotated with the role's ARN.
+
+The whole control layer is code — the controller (a `helm_release`), its IAM role and
+policy, the OIDC provider, and the service account (a `kubernetes_service_account`)
+are all in Terraform, so one `terraform apply` brings the cluster and its control
+layer up from scratch.
+
+The app itself — Deployment, Service, Ingress — lives in `k8s/eks/`, applied with
+kubectl. The Ingress carries the ALB annotations: internet-facing scheme, IP target
+type, and a `/health` healthcheck path.
 
 ```bash
-cd eks
+# infrastructure (from terraform/eks/)
+cd terraform/eks
 terraform init && terraform plan && terraform apply
-terraform destroy
+aws eks update-kubeconfig --region us-east-1 --name tripsvc
+
+# app (from repo root)
+kubectl apply -f k8s/eks/
+kubectl get ingress tripsvc            # wait for the ADDRESS column to fill
 ```
+
+Predict through the ALB (internet-facing, port 80 to the service on 8000):
+
+```bash
+curl -X POST http://<alb-address>/predict \
+  -H "Content-Type: application/json" \
+  -d '{"pickup_datetime":"2024-06-15T17:30:00","passenger_count":2,"vendor_id":2,"ratecode_id":1,"pickup_location_id":161}'
+# -> {"predicted_duration_sec": 1737}
+```
+
+Tear down with `terraform destroy` — delete the Ingress first
+(`kubectl delete -f k8s/eks/ingress.yaml`) so the controller removes the ALB before
+the cluster goes, otherwise the load balancer is orphaned.
 
 ## Stack
 
@@ -235,8 +270,11 @@ and apply the same thing at serve time.
 There's no model registry yet. When fetched from S3 it's a fixed key, not versioned,
 and it's single-node with no autoscaling, GPU, or real SLOs.
 
-Next: The EKS cluster and deployment onto it, a model registry with the service behind autoscaling, observability and
-SLOs, and a PyTorch plus ONNX path for inference optimization.
+Next: fold the app manifests (Deployment, Service, Ingress) into Terraform so the
+whole stack, not just the control layer, comes up from one apply; add
+readiness/liveness probes and resource limits to the cloud manifests; a model
+registry with the service behind autoscaling, observability and SLOs; and a PyTorch
+plus ONNX path for inference optimization.
 
 ## Data
 

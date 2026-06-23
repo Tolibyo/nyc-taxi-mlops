@@ -1,0 +1,22 @@
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: tripsvc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tripsvc
+  template:
+    metadata:
+      labels:
+        app: tripsvc
+    spec:
+      containers:
+        - name: tripsvc
+          image: 454634138298.dkr.ecr.us-east-1.amazonaws.com/tripsvc:latest
+          ports:
+            - containerPort: 8000
