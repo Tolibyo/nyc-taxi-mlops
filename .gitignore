@@ -9,9 +9,9 @@ mlruns/
 .venv/
 mlflow.db
 reports/
-k8s/taxi-secret.yaml
-k8s/taxi-pvc.yaml
-k8s/loader-pod.yaml
+k8s/local/taxi-secret.yaml
+k8s/local/taxi-pvc.yaml
+k8s/local/loader-pod.yaml
 .terraform/
 *.tfstate
 *.tfstate.*
