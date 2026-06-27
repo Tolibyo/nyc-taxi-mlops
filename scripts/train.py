@@ -17,6 +17,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
 from src.cleaning import clean_dataframe
+from src.transformers import RareZoneBucketer, CategoryCaster
 
 # anchored paths so script runs from anywhere
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -100,29 +101,15 @@ print(f"Numeric: {numeric_cols}")
 
 strategy = config["features"]["categorical_strategy"]
 
-if config["features"]["bucket_rare_zones"]:
-    top_n = config["features"]["top_n_zones"]
-    # find the top N zones by frequency
-    top_zones = (
-        X.group_by("PULocationID")
-        .agg(pl.len().alias("n"))
-        .sort("n", descending=True)
-        .head(top_n)
-        .get_column("PULocationID")
-        .to_list()
-    )
-    # replace zones not in top_n with -1
-    X = X.with_columns(
-        pl.when(pl.col("PULocationID").is_in(top_zones))
-        .then(pl.col("PULocationID"))
-        .otherwise(-1)
-        .alias("PULocationID")
-    )
-
 # convert to pandas and split into train/test
 X_pd = X.to_pandas()
 y_pd = y.to_pandas()
 X_train, X_test, y_train, y_test = train_test_split(X_pd, y_pd, test_size=0.2, random_state=42)
+
+if config["features"]["bucket_rare_zones"]:
+    bucketer = RareZoneBucketer(top_n=config["features"]["top_n_zones"])
+else:
+    bucketer = None
 
 # build the model based on config
 model_type = config["model"]["type"]
@@ -155,14 +142,14 @@ if strategy == "onehot":
             ("num", "passthrough", numeric_cols),
         ]
     )
-    pipeline = Pipeline([("preprocess", preprocessor), ("model", model)])
+    pipeline = Pipeline([("bucket", bucketer), ("preprocess", preprocessor), ("model", model)])
 
 elif strategy == "native":
-    # cast categoricals so histgb detects them via from_dtype
-    for col in categorical_cols:
-        X_train[col] = X_train[col].astype("category")
-        X_test[col] = X_test[col].astype("category")
-    pipeline = Pipeline([("model", model)])
+    pipeline = Pipeline([
+        ("bucket", bucketer),
+        ("cast", CategoryCaster(categorical_cols)),
+        ("model", model),
+    ])
 
 # group this run under its experiment name in mlflow
 mlflow.set_experiment(config["experiment_name"])
