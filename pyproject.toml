@@ -21,6 +21,7 @@ dev = [
     "pytest",
     "ruff",
     "pyyaml",
+    "httpx>=0.28.1",
 ]
 
 [tool.setuptools.packages.find]

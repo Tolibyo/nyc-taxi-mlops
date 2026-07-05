@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import boto3
 from dotenv import load_dotenv
+from pydantic import Field
 
 load_dotenv()
 
@@ -26,15 +27,21 @@ def load_model():
     return joblib.load(LOCAL_MODEL_PATH)
 
 
-pipeline = load_model()
+pipeline = None
+
+def get_model():
+    global pipeline
+    if pipeline is None: 
+        pipeline = load_model()
+    return pipeline
 
 
 class TripRequest(BaseModel):
     pickup_datetime: datetime
-    passenger_count: int
+    passenger_count: int = Field(ge=1, le=6)
     vendor_id: int
-    ratecode_id: int
-    pickup_location_id: int
+    ratecode_id: int = Field(ge=1, le=5)
+    pickup_location_id: int = Field(ge=1, le=265)
 
 
 
@@ -58,5 +65,6 @@ def health():
 @app.post("/predict")
 def predict(request: TripRequest):
     features = request_to_features(request)
-    prediction = pipeline.predict(features)[0]
+    model = get_model()
+    prediction = model.predict(features)[0]
     return {"predicted_duration_sec": float(prediction)}
