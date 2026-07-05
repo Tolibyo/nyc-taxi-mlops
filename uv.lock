@@ -1926,6 +1926,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "evidently" },
+    { name = "httpx" },
     { name = "mlflow" },
     { name = "polars" },
     { name = "pytest" },
@@ -1948,6 +1949,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "evidently" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mlflow" },
     { name = "polars" },
     { name = "pytest" },
