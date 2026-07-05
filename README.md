@@ -24,7 +24,7 @@ Target: `trip_duration` = dropoff minus pickup, in seconds.
 ```
 scripts/        download.py, train.py, serve.py, monitor.py
 src/            cleaning.py        # shared cleaning + feature logic
-tests/          test_cleaning.py   # fixture-based unit tests
+tests/          test_cleaning.py, test_api.py   # unit + API tests
 configs/        one YAML per experiment
 data/           reference zone lookup (raw parquet is gitignored)
 k8s/local/      kind manifests + cluster config (deployment, service, ingress)
@@ -77,8 +77,20 @@ objects even though serve.py never imports it directly; boto3 is in for the opti
 S3 model fetch. Deps are synced before code is copied so a code change doesn't bust
 the dependency cache. Runtime-only keeps it a fraction of the ~2GB full stack.
 
-**Tests.** Small synthetic DataFrames, one cleaning rule asserted per test, no
-external data, sub-second. CI runs them plus ruff on every push.
+**Validation at the door, model on first request.** `serve.py` mirrors the
+cleaning rules as Pydantic field constraints, so a request the training data
+would have filtered out gets a 422 instead of a silent prediction on
+out-of-distribution input. The model loads lazily on the first `/predict` call
+rather than at import, which keeps the app importable without the artifact and
+makes the API suite runnable in CI.
+
+**Tests.** Two suites. The cleaning tests use small synthetic DataFrames, one
+rule asserted per test. The API tests run FastAPI's TestClient against the app
+in process: request contract, boundary validation at the edges of every field
+rule, and a rare-zone parity check that sends two bucketed zones through
+`/predict` and requires identical predictions, proving the bucketing applies at
+serve time. No external data, sub-second, CI runs everything plus ruff on every
+push.
 
 ## Results
 
@@ -261,11 +273,6 @@ Polars, scikit-learn, MLflow, FastAPI, Evidently, Docker, Kubernetes, Helm, Terr
 ## Limitations and what's next
 
 This is the foundation layer and it's honest about the edges.
-
-Serve-time zone bucketing isn't wired up yet. The full-year model trains with rare
-zones bucketed, but serve.py passes the raw zone through, so requests for rare zones
-are served a bit out of distribution. The fix is to save the bucketing from training
-and apply the same thing at serve time.
 
 There's no model registry yet. When fetched from S3 it's a fixed key, not versioned,
 and it's single-node with no autoscaling, GPU, or real SLOs.
