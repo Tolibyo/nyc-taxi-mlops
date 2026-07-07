@@ -17,16 +17,28 @@ from src.transformers import RareZoneBucketer, CategoryCaster
 @pytest.fixture
 def trained_model():
     rng = np.random.default_rng(42)
-    sample_size = 300
+
+    frequent_zone_rows = list(range(1, 21)) * 10
+    rare_zone_rows = list(range(21, 121))
+    zone_ids = frequent_zone_rows + rare_zone_rows
+    sample_size = len(zone_ids)
+
     training_features = pd.DataFrame({
         "VendorID": rng.integers(1, 3, sample_size),
         "passenger_count": rng.integers(1, 7, sample_size),
         "RatecodeID": rng.integers(1, 6, sample_size),
-        "PULocationID": rng.integers(1, 266, sample_size),
+        "PULocationID": zone_ids,
         "pickup_hour": rng.integers(0, 24, sample_size),
         "pickup_dow": rng.integers(1, 8, sample_size),
     })
-    training_target = rng.integers(60, 3600, sample_size)
+    
+    training_target = []
+    for zone in zone_ids:
+        if zone <= 20:
+            training_target.append(500)
+        else:
+            training_target.append(3000)
+
     categorical_columns = ["VendorID", "RatecodeID", "PULocationID"]
     model_pipeline = Pipeline([
         ("bucket", RareZoneBucketer(top_n=20)),
@@ -108,3 +120,41 @@ def test_rare_zones_predict_identically(trained_model, monkeypatch):
     first_prediction = first_response.json()["predicted_duration_sec"]
     second_prediction = second_response.json()["predicted_duration_sec"]
     assert first_prediction == second_prediction
+
+
+def test_common_and_rare_zones_predict_differently(trained_model, monkeypatch):
+    monkeypatch.setattr("scripts.serve.pipeline", trained_model)
+    client = TestClient(app)
+
+    bucketer = trained_model.named_steps["bucket"]
+    top_zones = list(bucketer.top_zones_)
+
+    rare_zones = []
+    for zone_id in range(1, 266):
+        if zone_id not in top_zones:
+            rare_zones.append(zone_id)
+        if len(rare_zones) == 2:
+            break
+
+    first_response = client.post("/predict", json={
+        "pickup_datetime": "2024-06-15T17:30:00",
+        "passenger_count": 1,
+        "vendor_id": 2,
+        "ratecode_id": 1,
+        "pickup_location_id": top_zones[0]
+    })
+
+    second_response = client.post("/predict", json={
+        "pickup_datetime": "2024-06-15T17:30:00",
+        "passenger_count": 1,
+        "vendor_id": 2,
+        "ratecode_id": 1,
+        "pickup_location_id": rare_zones[0]
+    })
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    first_prediction = first_response.json()["predicted_duration_sec"]
+    second_prediction = second_response.json()["predicted_duration_sec"]
+    assert first_prediction != second_prediction
